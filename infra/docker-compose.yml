@@ -1,0 +1,122 @@
+x-build-context: &build-context
+  context: ..   # корень репозитория — сервисам нужен доступ к libs/common
+
+services:
+  # ---- инфраструктура ----
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: "auth,warehouse_ref,marking,print,stutzen_integration"
+      POSTGRES_USER: robostorages
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init-multi-db.sh:/docker-entrypoint-initdb.d/init-multi-db.sh
+    ports:
+      # 5433, не 5432 — на многих машинах уже установлен локальный PostgreSQL,
+      # который занимает стандартный порт (именно это и произошло при первом
+      # тестовом запуске). Сервисы внутри docker-сети всё равно обращаются
+      # к postgres:5432 (внутренний порт не меняется) — 5433 нужен только
+      # для подключения с хоста внешними инструментами (psql/DBeaver и т.п.).
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U robostorages"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ---- сервисы ----
+  auth:
+    build: { <<: *build-context, dockerfile: services/auth/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://robostorages:${POSTGRES_PASSWORD:-devpassword}@postgres/auth
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["8001:8000"]
+
+  warehouse:
+    build: { <<: *build-context, dockerfile: services/warehouse/Dockerfile }
+    env_file: .env
+    environment:
+      # На переходный период — существующий MS SQL Server (параллельный запуск с desktop-клиентом,
+      # см. docs/RoboStorages_анализ_и_миграция_в_web.md, раздел 3 "Backend").
+      # После полного отключения desktop — переезжает на Postgres, как остальные сервисы.
+      DATABASE_URL: ${WAREHOUSE_MSSQL_DSN}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis: { condition: service_healthy }
+    ports: ["8002:8000"]
+
+  marking:
+    build: { <<: *build-context, dockerfile: services/marking/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://robostorages:${POSTGRES_PASSWORD:-devpassword}@postgres/marking
+      # Ключ гос. системы "Честный Знак" — ТОЛЬКО здесь, никогда не должен попадать
+      # ни в один другой сервис и тем более во фронтенд (раздел 11 анализа).
+      CRPT_API_KEY: ${CRPT_API_KEY}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["8003:8000"]
+
+  print:
+    build: { <<: *build-context, dockerfile: services/print/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://robostorages:${POSTGRES_PASSWORD:-devpassword}@postgres/print
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["8004:8000"]
+
+  stutzen-integration:
+    build: { <<: *build-context, dockerfile: services/stutzen-integration/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://robostorages:${POSTGRES_PASSWORD:-devpassword}@postgres/stutzen_integration
+      REDIS_URL: redis://redis:6379/0
+      TRADESOFT_API_BASE_URL: https://www.stutzen.ru/api/v1
+      TRADESOFT_API_TOKEN: ${TRADESOFT_API_TOKEN}
+      API1C_BASE_URL: https://www.catalog.stutzen.ru/api1c
+      API1C_API_KEY: ${API1C_API_KEY}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["8005:8000"]
+
+  stutzen-integration-worker:
+    build: { <<: *build-context, dockerfile: services/stutzen-integration/Dockerfile }
+    command: ["arq", "app.worker.WorkerSettings"]
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TRADESOFT_API_BASE_URL: https://www.stutzen.ru/api/v1
+      TRADESOFT_API_TOKEN: ${TRADESOFT_API_TOKEN}
+      API1C_BASE_URL: https://www.catalog.stutzen.ru/api1c
+      API1C_API_KEY: ${API1C_API_KEY}
+    depends_on:
+      redis: { condition: service_healthy }
+
+  gateway:
+    build: { <<: *build-context, dockerfile: services/gateway/Dockerfile }
+    env_file: .env
+    environment:
+      AUTH_URL: http://auth:8000
+      WAREHOUSE_URL: http://warehouse:8000
+      MARKING_URL: http://marking:8000
+      PRINT_URL: http://print:8000
+    depends_on: [auth, warehouse, marking, print]
+    ports: ["8000:8000"]   # единственный порт, на который ходит фронтенд
+
+volumes:
+  pgdata:

@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+node_modules/
+dist/
+.DS_Store
+
+# Секреты — НИКОГДА не коммитить.
+# .env.example коммитится (это шаблон без значений), всё остальное — нет.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/

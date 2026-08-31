@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "warehouse"
+version = "0.1.0"
+description = "Приёмка товара: задания, позиции, статусы"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115"
+uvicorn = { extras = ["standard"], version = "^0.30" }
+sqlalchemy = "^2.0"
+pyodbc = "^5.1"          # драйвер к существующему MS SQL Server на переходный период
+alembic = "^1.13"
+pydantic = "^2.8"
+httpx = "^0.27"
+arq = "^0.26"             # публикация задач в очередь stutzen-integration
+pyjwt = "^2.9"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = "^0.24"
+httpx = "^0.27"           # тоже нужен в dev для TestClient-подобных вызовов
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

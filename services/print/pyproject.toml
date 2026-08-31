@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "print"
+version = "0.1.0"
+description = "Рендер этикеток в PDF/PNG"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115"
+uvicorn = { extras = ["standard"], version = "^0.30" }
+sqlalchemy = "^2.0"
+psycopg2-binary = "^2.9"
+alembic = "^1.13"
+pydantic = "^2.8"
+reportlab = "^4.2"
+pyjwt = "^2.9"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
