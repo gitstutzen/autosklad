@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Приёмка</title>
+<style>
+  /* Палитра выбрана под помещение склада: холодная бумага под лампами дневного
+     света, янтарный как цвет складской разметки для «здесь нужна работа»,
+     отдельный сиреневый для приостановленных — они ждут поставку, а не человека.
+     Моноширинный шрифт только для артикулов и количеств: там он нужен, чтобы
+     колонки выстраивались и цифры читались с одного взгляда. */
+  :root {
+    --paper:      #edeff1;
+    --surface:    #ffffff;
+    --ink:        #22282d;
+    --ink-soft:   #5b666f;
+    --rule:       #ccd3d8;
+    --work:       #c47f00;
+    --work-bg:    #fbf0d9;
+    --hold:       #6f61a0;
+    --hold-bg:    #eeebf6;
+    --done:       #2e7a52;
+    --alert:      #a93226;
+    --focus:      #1f6feb;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+  }
+
+  .num {
+    font-family: Consolas, "SF Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- шапка ---- */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding: 14px 20px;
+    background: var(--surface);
+    border-bottom: 2px solid var(--ink);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  header .count { color: var(--ink-soft); font-size: 14px; }
+  header .count b { color: var(--ink); font-size: 17px; }
+
+  select {
+    font: inherit;
+    padding: 5px 8px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 2px;
+  }
+  select:focus-visible, tr:focus-visible, button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+
+  .preview-note {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--ink-soft);
+    max-width: 34ch;
+  }
+
+  /* ---- основная сетка ---- */
+  main {
+    display: grid;
+    grid-template-rows: minmax(180px, 45%) 1fr;
+    height: calc(100% - 56px);
+  }
+  @media (min-width: 1100px) {
+    main { grid-template-rows: none; grid-template-columns: 1fr 1fr; }
+  }
+
+  section {
+    overflow: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--rule);
+    border-top: 1px solid var(--rule);
+  }
+
+  .section-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 9px 20px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .section-head strong { color: var(--ink); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    position: sticky;
+    top: 36px;
+    z-index: 1;
+    background: var(--surface);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--paper);
+    vertical-align: baseline;
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--paper); }
+  tbody tr[aria-selected="true"] {
+    background: var(--ink);
+    color: var(--surface);
+  }
+  tbody tr[aria-selected="true"] .provider { color: #d7dde2; }
+
+  .r { text-align: right; }
+  .provider { color: var(--ink-soft); }
+  .wrap { max-width: 40ch; }
+
+  /* ---- статусы ---- */
+  .status {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 2px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .status-1, .status-2 { background: var(--work-bg); color: var(--work); }
+  .status-5           { background: var(--hold-bg); color: var(--hold); }
+  .status-3, .status-4 { color: var(--done); }
+
+  /* Единственное выделенное место на экране: сколько ещё принимать.
+     Всё остальное намеренно приглушено. */
+  .remaining {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--work);
+  }
+  .remaining.zero { color: var(--ink-soft); font-weight: 400; font-size: 15px; }
+  .remaining.over { color: var(--alert); }
+
+  .empty, .loading, .error {
+    padding: 28px 20px;
+    color: var(--ink-soft);
+    max-width: 52ch;
+  }
+  .error { color: var(--alert); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Приёмка товара</h1>
+  <label>
+    Склад
+    <select id="stock"></select>
+  </label>
+  <span class="count" id="count"></span>
+  <span class="preview-note">Предварительный просмотр на реальных данных. Изменить ничего нельзя.</span>
+</header>
+
+<main>
+  <section aria-label="Приходы">
+    <div class="section-head">Приходы, требующие работы</div>
+    <div id="tasks"><p class="loading">Загружаем…</p></div>
+  </section>
+
+  <section aria-label="Позиции прихода">
+    <div class="section-head" id="positions-head">Выберите приход слева</div>
+    <div id="positions"><p class="empty">Здесь появится список деталей: сколько ожидается по накладной и сколько уже принято.</p></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmtMoney = (v) => v == null ? "" : v.toLocaleString("ru-RU", {maximumFractionDigits: 0});
+const fmtDate = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("ru-RU", {day: "2-digit", month: "2-digit", year: "2-digit"});
+};
+const esc = (s) => (s ?? "").toString().replace(/[<>&"]/g, c => (
+  {"<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;"}[c]
+));
+
+let selectedId = null;
+
+async function load(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Ошибка ${res.status}`);
+  }
+  return res.json();
+}
+
+async function initStocks() {
+  const stocks = await load("/api/stocks");
+  const select = $("stock");
+  select.innerHTML = stocks.map(s =>
+    `<option value="${s.stock_id}">Склад ${s.stock_id} — ${s.count}</option>`
+  ).join("");
+  select.onchange = () => loadTasks(+select.value);
+  if (stocks.length) loadTasks(stocks[0].stock_id);
+}
+
+async function loadTasks(stockId) {
+  $("tasks").innerHTML = '<p class="loading">Загружаем…</p>';
+  selectedId = null;
+  try {
+    const tasks = await load(`/api/tasks?stock_id=${stockId}`);
+    $("count").innerHTML = `<b>${tasks.length}</b> в работе`;
+
+    if (!tasks.length) {
+      $("tasks").innerHTML = '<p class="empty">На этом складе нет приходов, требующих работы.</p>';
+      return;
+    }
+
+    $("tasks").innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Приход</th><th>Дата</th><th>Поставщик</th>
+          <th class="r">Сумма</th><th>Состояние</th>
+        </tr></thead>
+        <tbody>${tasks.map(t => `
+          <tr tabindex="0" data-id="${t.id}">
+            <td class="num">${t.receipt_number ?? "—"}</td>
+            <td class="num">${fmtDate(t.created_at)}</td>
+            <td class="provider wrap">${esc(t.provider) || "—"}</td>
+            <td class="r num">${fmtMoney(t.amount)}</td>
+            <td><span class="status status-${t.status}">${esc(t.status_name)}</span></td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+
+    $("tasks").querySelectorAll("tbody tr").forEach(row => {
+      const open = () => selectTask(+row.dataset.id, row);
+      row.onclick = open;
+      row.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+    });
+  } catch (e) {
+    $("tasks").innerHTML = `<p class="error">${esc(e.message)}</p>`;
+  }
+}
+
+async function selectTask(taskId, row) {
+  selectedId = taskId;
+  document.querySelectorAll('#tasks tbody tr').forEach(r =>
+    r.setAttribute("aria-selected", r === row ? "true" : "false"));
+
+  const receipt = row.querySelector(".num").textContent;
+  $("positions-head").innerHTML = `Что в приходе <strong>${esc(receipt)}</strong>`;
+  $("positions").innerHTML = '<p class="loading">Запрашиваем у Stutzen…</p>';
+
+  try {
+    const items = await load(`/api/tasks/${taskId}/positions`);
+    if (selectedId !== taskId) return;
+
+    if (!items.length) {
+      $("positions").innerHTML = '<p class="empty">В этом приходе пока нет позиций.</p>';
+      return;
+    }
+
+    const left = items.reduce((sum, p) => sum + Math.max(p.remaining, 0), 0);
+    $("positions-head").innerHTML =
+      `Что в приходе <strong>${esc(receipt)}</strong> — позиций ${items.length}, осталось принять ${left}`;
+
+    $("positions").innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Артикул</th><th>Деталь</th>
+          <th class="r">Ждём</th><th class="r">Принято</th><th class="r">Осталось</th>
+        </tr></thead>
+        <tbody>${items.map(p => {
+          const cls = p.remaining === 0 ? "zero" : p.remaining < 0 ? "over" : "";
+          const shown = p.remaining < 0 ? `+${-p.remaining}` : p.remaining;
+          return `<tr>
+            <td class="num">${esc(p.article)}</td>
+            <td class="wrap">${esc(p.name)}<br><span class="provider">${esc(p.manufacturer)}</span></td>
+            <td class="r num">${p.quantity}</td>
+            <td class="r num">${p.quantity_fact}</td>
+            <td class="r num remaining ${cls}">${shown}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>`;
+  } catch (e) {
+    if (selectedId !== taskId) return;
+    $("positions").innerHTML = `<p class="error">${esc(e.message)}</p>`;
+  }
+}
+
+initStocks().catch(e => {
+  $("tasks").innerHTML = `<p class="error">${esc(e.message)}</p>`;
+});
+</script>
+</body>
+</html>
