@@ -89,6 +89,9 @@ services:
       TRADESOFT_API_TOKEN: ${TRADESOFT_API_TOKEN}
       API1C_BASE_URL: https://www.catalog.stutzen.ru/api1c
       API1C_API_KEY: ${API1C_API_KEY}
+      # Умолчание "true" продублировано здесь намеренно: даже если переменная
+      # пропала из .env, сервис не начнёт менять боевые заказы.
+      STUTZEN_READ_ONLY: ${STUTZEN_READ_ONLY:-true}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -104,6 +107,7 @@ services:
       TRADESOFT_API_TOKEN: ${TRADESOFT_API_TOKEN}
       API1C_BASE_URL: https://www.catalog.stutzen.ru/api1c
       API1C_API_KEY: ${API1C_API_KEY}
+      STUTZEN_READ_ONLY: ${STUTZEN_READ_ONLY:-true}
     depends_on:
       redis: { condition: service_healthy }
 

@@ -1,5 +1,13 @@
+import logging
+
 from fastapi import FastAPI
 from app.routers import statuses
+from libs.common.read_only import is_read_only
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 app = FastAPI(
     title="stutzen-integration",
@@ -15,6 +23,22 @@ app = FastAPI(
 app.include_router(statuses.router, prefix="/stutzen", tags=["stutzen"])
 
 
+@app.on_event("startup")
+def announce_mode() -> None:
+    """Режим работы печатается при старте, чтобы он был виден в логах контейнера,
+    а не выяснялся опытным путём. У проекта нет тестового контура Stutzen —
+    важно всегда знать, может ли этот процесс менять боевые данные."""
+    if is_read_only():
+        logging.getLogger("startup").info(
+            "Режим ТОЛЬКО ЧТЕНИЕ: запись в Stutzen заблокирована (STUTZEN_READ_ONLY)"
+        )
+    else:
+        logging.getLogger("startup").warning(
+            "ВНИМАНИЕ: запись в Stutzen РАЗРЕШЕНА. Этот процесс может менять "
+            "статусы реальных заказов."
+        )
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "read_only": is_read_only()}

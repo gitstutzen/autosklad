@@ -13,8 +13,15 @@ from arq import cron
 from arq.connections import RedisSettings
 import os
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from app.tradesoft_client import TradeSoftClient
 from app.api1c_client import Api1cClient
+from app import sync as sync_module
+
+_engine = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=_engine)
 
 
 async def sync_position_status(ctx, position_id: int, status_id: int, sub_states: list[dict] | None = None):
@@ -31,7 +38,30 @@ async def sync_position_status(ctx, position_id: int, status_id: int, sub_states
         raise
 
 
+async def refresh_mirror_incremental(ctx):
+    """Подхватывает новые приходы. Только чтение — работает и при включённом
+    режиме read-only."""
+    with SessionLocal() as session:
+        return sync_module.sync_incremental(session)
+
+
+async def refresh_mirror_full(ctx):
+    """Полная сверка. Нужна потому, что api1c отдаёт записи по времени создания,
+    а не изменения: если статус старого задания поменялся на стороне Stutzen,
+    инкрементальная синхронизация этого не увидит.
+
+    Тяжёлая (~44 сек, 452 000+ записей), поэтому идёт ночью."""
+    with SessionLocal() as session:
+        return sync_module.sync_full(session)
+
+
 class WorkerSettings:
-    functions = [sync_position_status]
+    functions = [sync_position_status, refresh_mirror_incremental, refresh_mirror_full]
+    cron_jobs = [
+        # Новые приходы — часто, чтобы кладовщик видел их почти сразу.
+        cron(refresh_mirror_incremental, minute=set(range(0, 60, 2))),
+        # Полная сверка — ночью, когда склад не работает.
+        cron(refresh_mirror_full, hour=3, minute=30),
+    ]
     redis_settings = RedisSettings.from_dsn(os.environ["REDIS_URL"])
     max_tries = 5  # с экспоненциальным backoff по умолчанию в arq
